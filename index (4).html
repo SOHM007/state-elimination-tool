@@ -1,0 +1,429 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFA to Regular Expression Converter</title>
+
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #101827;
+  color: #eef4ff;
+}
+header {
+  text-align: center;
+  padding: 28px 15px;
+  background: #17263d;
+  border-bottom: 2px solid #16c7b7;
+}
+header h1 { margin: 0 0 10px; color: #48e2d0; }
+header p { margin: 0; color: #bdcbe0; }
+main { max-width: 1000px; margin: auto; padding: 20px; }
+.card {
+  background: #1a2940;
+  padding: 20px;
+  margin-bottom: 18px;
+  border: 1px solid #344863;
+  border-radius: 12px;
+}
+h2 { color: #48e2d0; margin-top: 0; }
+label { display: block; margin: 13px 0 6px; }
+input {
+  width: 100%;
+  padding: 11px;
+  border-radius: 7px;
+  border: 1px solid #526781;
+  background: #0f1a2b;
+  color: white;
+  font-size: 15px;
+}
+button {
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 7px;
+  margin: 8px 5px 0 0;
+  cursor: pointer;
+  font-weight: bold;
+  background: #19c8b6;
+  color: #082323;
+}
+button:hover { background: #69efdf; }
+.secondary { background: #d5e2f3; color: #17263d; }
+.danger { background: #ff7777; color: #310909; }
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  min-width: 320px;
+}
+th, td {
+  border: 1px solid #415571;
+  padding: 9px;
+  text-align: center;
+}
+th { background: #243b58; }
+td input { min-width: 65px; text-align: center; }
+.result {
+  background: #0c1929;
+  padding: 18px;
+  border-radius: 8px;
+  border-left: 4px solid #19c8b6;
+  overflow-wrap: anywhere;
+}
+#regex { font-size: 23px; color: #6df3df; font-weight: bold; }
+#message { color: #ffd27a; white-space: pre-wrap; }
+.steps { line-height: 1.8; overflow-wrap: anywhere; }
+small { color: #bdcbe0; }
+footer { text-align: center; padding: 20px; color: #a9bad1; }
+@media (max-width: 600px) {
+  main { padding: 12px; }
+  .card { padding: 14px; }
+  header h1 { font-size: 24px; }
+}
+</style>
+</head>
+
+<body>
+<header>
+  <h1>DFA → Regular Expression</h1>
+  <p>State Elimination Tool | Simple and Interactive</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. Define Your DFA</h2>
+
+    <label>States (comma-separated)</label>
+    <input id="states" value="q0,q1">
+
+    <label>Input alphabet (comma-separated)</label>
+    <input id="alphabet" value="0,1">
+
+    <label>Start state</label>
+    <input id="start" value="q0">
+
+    <label>Final / accepting states (comma-separated)</label>
+    <input id="finals" value="q1">
+
+    <button onclick="buildTable()">Build Transition Table</button>
+    <button class="secondary" onclick="loadExample()">Load Example</button>
+  </section>
+
+  <section class="card">
+    <h2>2. Enter Transitions</h2>
+    <small>For each state and input symbol, enter exactly one destination state.</small>
+    <div id="transitionTable" class="table-wrap">
+      Build the transition table first.
+    </div>
+    <button onclick="convert()">Convert to Regular Expression</button>
+    <button class="secondary" onclick="downloadResult()">Download Result</button>
+    <p id="message"></p>
+  </section>
+
+  <section class="card">
+    <h2>3. Result</h2>
+    <div class="result">
+      <p>Equivalent Regular Expression:</p>
+      <div id="regex">Your result will appear here.</div>
+    </div>
+    <button class="secondary" onclick="copyResult()">Copy Regular Expression</button>
+  </section>
+
+  <section class="card">
+    <h2>4. State Elimination Steps</h2>
+    <div id="steps" class="steps">
+      The elimination steps will appear here.
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>How to Use</h2>
+    <ol>
+      <li>Enter the DFA states, alphabet, start state, and final states.</li>
+      <li>Click <b>Build Transition Table</b>.</li>
+      <li>Enter the destination state for every state-symbol pair.</li>
+      <li>Click <b>Convert to Regular Expression</b>.</li>
+      <li>Read or download the result.</li>
+    </ol>
+    <p><b>Notation:</b> ε means an empty string, ∅ means no path, and * means zero or more repetitions.</p>
+  </section>
+</main>
+
+<footer>State Elimination Tool | Educational Project</footer>
+
+<script>
+let lastRegex = "";
+let lastSteps = [];
+
+function parseList(id) {
+  return document.getElementById(id).value
+    .split(",").map(x => x.trim()).filter(Boolean);
+}
+
+function buildTable(saved = {}) {
+  const states = parseList("states");
+  const alphabet = parseList("alphabet");
+  const container = document.getElementById("transitionTable");
+
+  if (!states.length || !alphabet.length) {
+    document.getElementById("message").textContent =
+      "Enter at least one state and one alphabet symbol.";
+    return;
+  }
+
+  if (new Set(states).size !== states.length ||
+      new Set(alphabet).size !== alphabet.length) {
+    document.getElementById("message").textContent =
+      "State names and alphabet symbols must not contain duplicates.";
+    return;
+  }
+
+  let html = "<table><thead><tr><th>State</th>";
+  alphabet.forEach(a => html += "<th>Input " + esc(a) + "</th>");
+  html += "</tr></thead><tbody>";
+
+  states.forEach(s => {
+    html += "<tr><th>" + esc(s) + "</th>";
+    alphabet.forEach(a => {
+      const key = s + "||" + a;
+      html += '<td><input data-from="' + esc(key) +
+        '" list="stateOptions" placeholder="Destination" value="' +
+        esc(saved[key] || "") + '"></td>';
+    });
+    html += "</tr>";
+  });
+
+  html += '</tbody></table><datalist id="stateOptions">';
+  states.forEach(s => html += "<option value='" + esc(s) + "'>");
+  html += "</datalist>";
+  container.innerHTML = html;
+  document.getElementById("message").textContent = "";
+}
+
+function esc(value) {
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;",
+    '"':"&quot;", "'":"&#39;"
+  })[c]);
+}
+
+function loadExample() {
+  document.getElementById("states").value = "q0,q1";
+  document.getElementById("alphabet").value = "0,1";
+  document.getElementById("start").value = "q0";
+  document.getElementById("finals").value = "q1";
+
+  buildTable({
+    "q0||0": "q0",
+    "q0||1": "q1",
+    "q1||0": "q0",
+    "q1||1": "q1"
+  });
+
+  document.getElementById("regex").textContent =
+    "Enter or confirm transitions, then convert.";
+  document.getElementById("steps").textContent = "";
+}
+
+function readDFA() {
+  const states = parseList("states");
+  const alphabet = parseList("alphabet");
+  const start = document.getElementById("start").value.trim();
+  const finals = parseList("finals");
+
+  if (!states.length || !alphabet.length)
+    throw Error("States and alphabet cannot be empty.");
+
+  if (new Set(states).size !== states.length ||
+      new Set(alphabet).size !== alphabet.length)
+    throw Error("Duplicate states or alphabet symbols found.");
+
+  if (!states.includes(start))
+    throw Error("The start state must be in the state list.");
+
+  if (!finals.length || finals.some(f => !states.includes(f)))
+    throw Error("Every final state must be in the state list.");
+
+  const transitions = {};
+  document.querySelectorAll("#transitionTable input[data-from]")
+    .forEach(input => {
+      const [from, symbol] = input.dataset.from.split("||");
+      const to = input.value.trim();
+
+      if (!states.includes(to))
+        throw Error("Enter a valid destination state for " +
+          from + " on input " + symbol + ".");
+      transitions[from + "||" + symbol] = to;
+    });
+
+  if (Object.keys(transitions).length !== states.length * alphabet.length)
+    throw Error("Build the transition table before converting.");
+
+  return { states, alphabet, start, finals, transitions };
+}
+
+// Split a regular expression at top-level union operators.
+function splitUnion(s) {
+  const parts = [];
+  let depth = 0, current = "";
+
+  for (const ch of s) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "|" && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else current += ch;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function union(a, b) {
+  if (!a || a === "∅") return b || "∅";
+  if (!b || b === "∅") return a;
+  if (a === b) return a;
+
+  const terms = [...new Set([...splitUnion(a), ...splitUnion(b)])];
+  return terms.join("|");
+}
+
+function isWrapped(s) {
+  if (!s || s[0] !== "(" || s[s.length - 1] !== ")") return false;
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    if (s[i] === ")") depth--;
+    if (depth === 0 && i < s.length - 1) return false;
+  }
+  return depth === 0;
+}
+
+function atom(s) {
+  if (s === "ε" || s.length === 1 || isWrapped(s) || s.endsWith("*"))
+    return s;
+  return "(" + s + ")";
+}
+
+function concat(a, b) {
+  if (!a || !b || a === "∅" || b === "∅") return "∅";
+  if (a === "ε") return b;
+  if (b === "ε") return a;
+  return atom(a) + atom(b);
+}
+
+function star(a) {
+  if (!a || a === "∅" || a === "ε") return "ε";
+  if (a.endsWith("*")) return a;
+  return atom(a) + "*";
+}
+
+function convert() {
+  try {
+    const dfa = readDFA();
+    const { states, alphabet, start, finals, transitions } = dfa;
+
+    // Add a new start and a new final state to form a GNFA.
+    const newStart = "__START__";
+    const newFinal = "__FINAL__";
+    const nodes = [newStart, ...states, newFinal];
+    const R = {};
+
+    nodes.forEach(i => {
+      R[i] = {};
+      nodes.forEach(j => R[i][j] = "∅");
+    });
+
+    R[newStart][start] = "ε";
+
+    states.forEach(s => {
+      alphabet.forEach(a => {
+        const to = transitions[s + "||" + a];
+        R[s][to] = union(R[s][to], a);
+      });
+    });
+
+    finals.forEach(f => {
+      R[f][newFinal] = union(R[f][newFinal], "ε");
+    });
+
+    const steps = [];
+    steps.push("Step 1: Create a new start and final state.");
+    steps.push("Step 2: Add ε-transitions from the new start to the original start and from every accepting state to the new final state.");
+
+    // Eliminate every original state.
+    for (const k of states) {
+      steps.push("Eliminate state " + k + ".");
+
+      const incoming = nodes.filter(i => i !== k && R[i][k] !== "∅");
+      const outgoing = nodes.filter(j => j !== k && R[k][j] !== "∅");
+      const loop = star(R[k][k]);
+
+      for (const i of incoming) {
+        for (const j of outgoing) {
+          const path = concat(concat(R[i][k], loop), R[k][j]);
+          R[i][j] = union(R[i][j], path);
+        }
+      }
+
+      nodes.forEach(i => {
+        R[i][k] = "∅";
+        R[k][i] = "∅";
+      });
+    }
+
+    const result = R[newStart][newFinal];
+    lastRegex = result;
+    lastSteps = [...steps, "Final result: " + result];
+
+    document.getElementById("regex").textContent = result;
+    document.getElementById("steps").innerHTML =
+      "<ol>" + lastSteps.map(s => "<li>" + esc(s) + "</li>").join("") +
+      "</ol>";
+    document.getElementById("message").textContent =
+      "Conversion completed successfully.";
+  } catch (error) {
+    document.getElementById("message").textContent = error.message;
+  }
+}
+
+function copyResult() {
+  if (!lastRegex) {
+    alert("Convert a DFA first.");
+    return;
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(lastRegex)
+      .then(() => alert("Regular expression copied!"))
+      .catch(() => prompt("Copy this expression:", lastRegex));
+  } else {
+    prompt("Copy this expression:", lastRegex);
+  }
+}
+
+function downloadResult() {
+  if (!lastRegex) {
+    alert("Convert a DFA first.");
+    return;
+  }
+  const content = "DFA to Regular Expression\n\n" +
+    "Regular Expression: " + lastRegex + "\n\n" +
+    lastSteps.join("\n");
+  const blob = new Blob([content], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "regular-expression-result.txt";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+buildTable();
+</script>
+</body>
+</html>
